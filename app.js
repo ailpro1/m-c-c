@@ -20,23 +20,94 @@ document.addEventListener('touchend', (e) => {
 const STORAGE_KEY = 'commitment-checklist.v1';
 
 const SECTIONS = [
-  { key: 'income', title: 'Income' },
-  { key: 'commitments', title: 'Commitments' },
-  { key: 'savings', title: 'To Savings' },
+  { key: 'income', title: 'Income', noun: 'income' },
+  { key: 'commitments', title: 'Commitments', noun: 'commitment' },
+  { key: 'savings', title: 'To Savings', noun: 'savings' },
 ];
 
-const currency = new Intl.NumberFormat('en-MY', {
-  style: 'currency',
-  currency: 'MYR',
-  currencyDisplay: 'symbol',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-}).format;
+const SECTION_BY_KEY = Object.fromEntries(SECTIONS.map((s) => [s.key, s]));
 
-function formatRM(amount) {
-  // en-MY renders MYR as "RM" — normalise spacing just in case.
-  return currency(amount || 0).replace('RM', 'RM').replace(/\s+/g, '');
+/* ---------------- Money formatting ---------------- */
+
+function groupAmount(n) {
+  return Math.abs(n).toLocaleString('en-MY', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
+
+// Compact form for chips and section totals: RM1,200.00
+function formatRM(n) {
+  return (n < 0 ? '−' : '') + 'RM' + groupAmount(n);
+}
+
+// Roomy form for the big balance readouts: RM 1,200.00
+function formatRMLarge(n) {
+  return (n < 0 ? '−' : '') + 'RM ' + groupAmount(n);
+}
+
+/* ---------------- Cent-first amount entry ----------------
+   Digits fill from the cents up, the way banking apps and ATMs work:
+   typing 1, 2, 5, 0 reads 0.01 → 0.12 → 1.25 → 12.50. The raw digit
+   string is the source of truth; the formatted text is derived. */
+
+const MAX_DIGITS = 9; // up to RM9,999,999.99
+
+function digitsToAmount(digits) {
+  return digits ? parseInt(digits, 10) / 100 : 0;
+}
+
+function amountToDigits(amount) {
+  return amount ? String(Math.round(amount * 100)) : '';
+}
+
+function normaliseDigits(raw) {
+  const stripped = String(raw).replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+  return stripped.slice(0, MAX_DIGITS);
+}
+
+function formatDigits(digits) {
+  return groupAmount(digitsToAmount(digits));
+}
+
+/* ---------------- Per-digit animated number ----------------
+   Re-renders a money string as one span per character and animates only
+   the characters that actually changed, so the balance visibly ticks as
+   each digit is typed instead of silently swapping. */
+
+function setAnimatedAmount(el, text, direction) {
+  const prev = el.dataset.text || '';
+  if (prev === text) return;
+
+  const chars = [...text];
+  const prevChars = [...prev];
+  // Align from the right so digits keep their identity as the number grows.
+  const offset = chars.length - prevChars.length;
+
+  const frag = document.createDocumentFragment();
+  chars.forEach((ch, i) => {
+    const span = document.createElement('span');
+    span.className = 'digit';
+    span.textContent = ch;
+    if (prev && prevChars[i - offset] !== ch) {
+      span.classList.add(direction < 0 ? 'roll-down' : 'roll');
+    }
+    frag.appendChild(span);
+  });
+
+  el.textContent = '';
+  el.appendChild(frag);
+  el.dataset.text = text;
+}
+
+// Balance colour is conditional: in the black, in the red, or break-even.
+function applyBalanceTone(el, value) {
+  el.classList.toggle('positive', value > 0.004);
+  el.classList.toggle('negative', value < -0.004);
+  el.classList.toggle('zero', Math.abs(value) <= 0.004);
+}
+
+/* ---------------- State ---------------- */
 
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -95,38 +166,32 @@ function sortSection(key) {
 }
 
 /* ---------------- Totals & balance ---------------- */
+
 function sectionTotal(key) {
   return state[key].reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 }
 
-// Whatever is currently typed into each section's "add item" amount box,
-// counted immediately even before the item is added — so the balance
-// reacts the instant you start typing, not just after existing items change.
-const draftAmounts = { income: 0, commitments: 0, savings: 0 };
+function currentBalance() {
+  return sectionTotal('income') - sectionTotal('commitments') - sectionTotal('savings');
+}
 
-function updateTotals(animateBalance) {
-  const income = sectionTotal('income') + draftAmounts.income;
-  const commitments = sectionTotal('commitments') + draftAmounts.commitments;
-  const savings = sectionTotal('savings') + draftAmounts.savings;
-  const balance = income - commitments - savings;
+let lastBalance = 0;
 
-  document.getElementById('incomeTotal').textContent = formatRM(income);
-  document.getElementById('commitmentsTotal').textContent = formatRM(commitments);
-  document.getElementById('savingsTotal').textContent = formatRM(savings);
+function updateTotals() {
+  document.getElementById('incomeTotal').textContent = formatRM(sectionTotal('income'));
+  document.getElementById('commitmentsTotal').textContent = formatRM(sectionTotal('commitments'));
+  document.getElementById('savingsTotal').textContent = formatRM(sectionTotal('savings'));
 
   for (const s of SECTIONS) {
     const el = document.querySelector(`.section[data-key="${s.key}"] .section-total`);
-    if (el) el.textContent = formatRM(sectionTotal(s.key) + draftAmounts[s.key]);
+    if (el) el.textContent = formatRM(sectionTotal(s.key));
   }
 
+  const balance = currentBalance();
   const balanceEl = document.getElementById('balanceAmount');
-  balanceEl.innerHTML = formatRM(balance).replace('RM', 'RM&nbsp;');
-  balanceEl.classList.toggle('negative', balance < 0);
-  if (animateBalance) {
-    balanceEl.classList.remove('pulse');
-    void balanceEl.offsetWidth; // restart animation
-    balanceEl.classList.add('pulse');
-  }
+  setAnimatedAmount(balanceEl, formatRMLarge(balance), balance - lastBalance);
+  applyBalanceTone(balanceEl, balance);
+  lastBalance = balance;
 }
 
 /* ---------------- Rendering ---------------- */
@@ -140,25 +205,15 @@ function buildSectionShells() {
     const node = sectionTemplate.content.firstElementChild.cloneNode(true);
     node.dataset.key = s.key;
     node.querySelector('h2').textContent = s.title;
-
-    const form = node.querySelector('.add-item-form');
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      addItem(s.key, form);
+    node.querySelector('.add-row').addEventListener('click', () => {
+      openSheet({ mode: 'add', key: s.key });
     });
-
-    form.querySelector('.add-amount').addEventListener('input', (e) => {
-      draftAmounts[s.key] = parseFloat(e.target.value) || 0;
-      updateTotals(true);
-    });
-
     grid.appendChild(node);
   }
 }
 
 function renderSection(key, { skipFlip } = {}) {
-  const sectionEl = grid.querySelector(`.section[data-key="${key}"]`);
-  const list = sectionEl.querySelector('.item-list');
+  const list = grid.querySelector(`.section[data-key="${key}"] .item-list`);
 
   // FLIP: record first positions of existing rows.
   const firstRects = new Map();
@@ -186,25 +241,10 @@ function renderSection(key, { skipFlip } = {}) {
     checkbox.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M5 13l4.5 4.5L19 8" stroke="white" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     checkbox.addEventListener('click', () => toggleItem(key, item.id));
 
-    const nameInput = row.querySelector('.item-name');
-    nameInput.value = item.name;
-    nameInput.addEventListener('input', () => {
-      item.name = nameInput.value;
-      persist();
-    });
-
-    const amountInput = row.querySelector('.item-amount');
-    amountInput.value = item.amount ? trimAmount(item.amount) : '';
-    amountInput.placeholder = '0.00';
-    amountInput.addEventListener('input', () => {
-      item.amount = parseFloat(amountInput.value) || 0;
-      updateTotals(true);
-      persist();
-    });
-    amountInput.addEventListener('change', () => {
-      sortSection(key);
-      renderSection(key);
-      persist();
+    row.querySelector('.item-name').textContent = item.name;
+    row.querySelector('.item-amount').textContent = formatRM(item.amount || 0);
+    row.querySelector('.item-body').addEventListener('click', () => {
+      openSheet({ mode: 'edit', key, id: item.id });
     });
 
     row.querySelector('.delete-btn').addEventListener('click', () => deleteItem(key, item.id));
@@ -232,46 +272,161 @@ function renderSection(key, { skipFlip } = {}) {
 
 function renderAll(opts) {
   for (const s of SECTIONS) renderSection(s.key, opts);
-  updateTotals(false);
+  updateTotals();
 }
 
-function trimAmount(n) {
-  return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100);
+/* ---------------- Add / edit sheet ---------------- */
+
+const sheetBackdrop = document.getElementById('sheetBackdrop');
+const sheetTitle = document.getElementById('sheetTitle');
+const sheetName = document.getElementById('sheetName');
+const sheetAmount = document.getElementById('sheetAmount');
+const sheetBalance = document.getElementById('sheetBalance');
+const sheetDelta = document.getElementById('sheetDelta');
+const sheetDeleteBtn = document.getElementById('sheetDelete');
+
+let sheetCtx = null;
+let sheetLastProjection = 0;
+
+// Balance as it would stand if the sheet were saved right now.
+function projectedBalance() {
+  const totals = {
+    income: sectionTotal('income'),
+    commitments: sectionTotal('commitments'),
+    savings: sectionTotal('savings'),
+  };
+  if (sheetCtx.mode === 'edit') {
+    const item = state[sheetCtx.key].find((it) => it.id === sheetCtx.id);
+    if (item) totals[sheetCtx.key] -= Number(item.amount) || 0;
+  }
+  totals[sheetCtx.key] += digitsToAmount(sheetCtx.digits);
+  return totals.income - totals.commitments - totals.savings;
 }
 
-/* ---------------- Mutations ---------------- */
+function updateSheetPreview() {
+  const projected = projectedBalance();
+  setAnimatedAmount(sheetBalance, formatRMLarge(projected), projected - sheetLastProjection);
+  applyBalanceTone(sheetBalance, projected);
+  sheetLastProjection = projected;
 
-function addItem(key, form) {
-  const nameInput = form.querySelector('.add-name');
-  const amountInput = form.querySelector('.add-amount');
-  const name = nameInput.value.trim();
-  const amount = parseFloat(amountInput.value) || 0;
-  if (!name && !amount) return;
+  const delta = projected - currentBalance();
+  if (Math.abs(delta) <= 0.004) {
+    sheetDelta.textContent = 'No change yet';
+  } else {
+    sheetDelta.textContent = `${delta > 0 ? '▲' : '▼'} ${formatRM(Math.abs(delta))} vs now`;
+  }
+}
 
-  state[key].push({ id: uid(), name: name || 'New item', amount, checked: false });
+function openSheet({ mode, key, id }) {
+  const section = SECTION_BY_KEY[key];
+  sheetCtx = { mode, key, id: id || null, digits: '' };
+
+  if (mode === 'edit') {
+    const item = state[key].find((it) => it.id === id);
+    if (!item) return;
+    sheetCtx.digits = amountToDigits(item.amount);
+    sheetName.value = item.name;
+    sheetTitle.textContent = `Edit ${section.noun}`;
+    sheetDeleteBtn.hidden = false;
+  } else {
+    sheetName.value = '';
+    sheetTitle.textContent = `New ${section.noun}`;
+    sheetDeleteBtn.hidden = true;
+  }
+
+  sheetAmount.value = sheetCtx.digits ? formatDigits(sheetCtx.digits) : '';
+
+  // Start the preview from today's balance so the first keystroke animates.
+  sheetBalance.dataset.text = '';
+  sheetLastProjection = currentBalance();
+  updateSheetPreview();
+
+  sheetBackdrop.hidden = false;
+  document.body.style.overflow = 'hidden';
+  requestAnimationFrame(() => sheetBackdrop.classList.add('open'));
+
+  setTimeout(() => {
+    const target = mode === 'edit' ? sheetAmount : sheetName;
+    target.focus();
+    if (target === sheetAmount) {
+      const end = sheetAmount.value.length;
+      sheetAmount.setSelectionRange(end, end);
+    }
+  }, 260);
+}
+
+function closeSheet() {
+  sheetBackdrop.classList.remove('open');
+  document.body.style.overflow = '';
+  sheetCtx = null;
+  setTimeout(() => { sheetBackdrop.hidden = true; }, 300);
+}
+
+function saveSheet() {
+  if (!sheetCtx) return;
+  const { mode, key, id } = sheetCtx;
+  const amount = digitsToAmount(sheetCtx.digits);
+  const name = sheetName.value.trim();
+
+  if (mode === 'add') {
+    if (!name && !amount) { closeSheet(); return; }
+    state[key].push({ id: uid(), name: name || 'New item', amount, checked: false });
+  } else {
+    const item = state[key].find((it) => it.id === id);
+    if (item) {
+      item.name = name || item.name;
+      item.amount = amount;
+    }
+  }
+
+  closeSheet();
   sortSection(key);
   renderSection(key);
-  draftAmounts[key] = 0;
-  updateTotals(true);
+  updateTotals();
   persist();
-
-  nameInput.value = '';
-  amountInput.value = '';
-  nameInput.focus();
 }
+
+sheetAmount.addEventListener('input', () => {
+  if (!sheetCtx) return;
+  sheetCtx.digits = normaliseDigits(sheetAmount.value);
+  sheetAmount.value = sheetCtx.digits ? formatDigits(sheetCtx.digits) : '';
+  updateSheetPreview();
+});
+
+sheetName.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); sheetAmount.focus(); }
+});
+sheetAmount.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); saveSheet(); }
+});
+
+document.getElementById('sheetSave').addEventListener('click', saveSheet);
+document.getElementById('sheetCancel').addEventListener('click', closeSheet);
+sheetDeleteBtn.addEventListener('click', () => {
+  if (!sheetCtx || sheetCtx.mode !== 'edit') return;
+  const { key, id } = sheetCtx;
+  closeSheet();
+  deleteItem(key, id);
+});
+sheetBackdrop.addEventListener('click', (e) => {
+  if (e.target === sheetBackdrop) closeSheet();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && sheetCtx) closeSheet();
+});
+
+/* ---------------- Mutations ---------------- */
 
 function deleteItem(key, id) {
   const row = grid.querySelector(`.section[data-key="${key}"] .item[data-id="${id}"]`);
   if (row) {
     row.classList.add('dragging-out');
-    requestAnimationFrame(() => {
-      row.style.transform = 'translateX(30px)';
-    });
+    requestAnimationFrame(() => { row.style.transform = 'translateX(30px)'; });
   }
   setTimeout(() => {
     state[key] = state[key].filter((it) => it.id !== id);
     renderSection(key, { skipFlip: true });
-    updateTotals(true);
+    updateTotals();
     persist();
   }, 180);
 }
@@ -286,20 +441,17 @@ function toggleItem(key, id) {
     const row = grid.querySelector(`.section[data-key="${key}"] .item[data-id="${id}"]`);
     if (row) {
       row.classList.add('checked', 'just-checked');
-      const cb = row.querySelector('.checkbox');
-      celebrate(cb);
+      celebrate(row.querySelector('.checkbox'));
       setTimeout(() => row.classList.remove('just-checked'), 500);
     }
   }
 
   // Give the celebration a beat before the row hops to the bottom.
-  const delay = item.checked ? 260 : 0;
   setTimeout(() => {
     sortSection(key);
     renderSection(key);
-  }, delay);
+  }, item.checked ? 260 : 0);
 
-  updateTotals(true);
   persist();
 }
 
@@ -381,9 +533,8 @@ resizeCanvas();
 const CONFETTI_COLORS = ['#34C759', '#007AFF', '#FF9500', '#AF52DE', '#FF3B30', '#30B0C7', '#FFD60A'];
 
 function burstConfetti(x, y) {
-  const count = 26;
-  for (let i = 0; i < count; i++) {
-    const angle = (Math.random() * Math.PI * 2);
+  for (let i = 0; i < 26; i++) {
+    const angle = Math.random() * Math.PI * 2;
     const speed = 3 + Math.random() * 6;
     confettiParticles.push({
       x, y,
@@ -415,9 +566,8 @@ function tickConfetti() {
     p.y += p.vy;
     p.rotation += p.rotationSpeed;
 
-    const fade = 1 - p.life / p.maxLife;
     cctx.save();
-    cctx.globalAlpha = Math.max(fade, 0);
+    cctx.globalAlpha = Math.max(1 - p.life / p.maxLife, 0);
     cctx.translate(p.x, p.y);
     cctx.rotate(p.rotation);
     cctx.fillStyle = p.color;
