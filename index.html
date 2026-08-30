@@ -8,7 +8,7 @@
 <!-- Bump ?v= on styles.css/app.js whenever their content changes, so
      browsers and any CDN/proxy in front of this site fetch the new file
      instead of serving a stale cached copy under the same URL. -->
-<link rel="stylesheet" href="styles.css?v=3">
+<link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
 
@@ -16,7 +16,13 @@
 
   <header class="topbar">
     <div class="balance-card">
-      <div class="balance-label">Balance</div>
+      <div class="balance-head">
+        <span class="balance-label">Balance</span>
+        <span class="cycle-chip" id="cycleChip">
+          <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 3v4M16 3v4M3.5 10h17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <span id="cycleLabel"></span>
+        </span>
+      </div>
       <div class="balance-amount" id="balanceAmount"></div>
       <div class="balance-breakdown">
         <div class="chip chip-income">
@@ -33,13 +39,25 @@
         </div>
       </div>
     </div>
+  </header>
+
+  <!-- Shown when the calendar has moved on from the stored cycle month -->
+  <div class="cycle-banner" id="cycleBanner" hidden>
+    <div class="cycle-banner-text">
+      <strong>It's <span id="bannerNewMonth"></span></strong>
+      <span>You're still on the <span id="bannerOldMonth"></span> cycle.</span>
+    </div>
+    <button class="cycle-banner-btn" id="cycleRollBtn" type="button">Start new cycle</button>
+  </div>
+
+  <main class="sections-grid" id="sectionsGrid"></main>
+
+  <footer class="page-footer">
     <button class="clear-btn" id="clearBtn" type="button">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       Clear checkmarks
     </button>
-  </header>
-
-  <main class="sections-grid" id="sectionsGrid"></main>
+  </footer>
 
   <!-- Add / edit sheet: shows the live balance as the amount is typed -->
   <div class="sheet-backdrop" id="sheetBackdrop" hidden>
@@ -81,8 +99,8 @@
 
   <div class="modal-backdrop" id="modalBackdrop">
     <div class="modal">
-      <h3>Clear all checkmarks?</h3>
-      <p>This will uncheck every item in Income, Commitments and To Savings. Your items and amounts stay the same.</p>
+      <h3>Start a new cycle?</h3>
+      <p id="modalBody">This unchecks every item and moves you to the current month. Your items and amounts stay the same.</p>
       <div class="modal-actions">
         <button class="modal-btn cancel" id="modalCancel" type="button">Cancel</button>
         <button class="modal-btn confirm" id="modalConfirm" type="button">Clear</button>
@@ -122,6 +140,6 @@
     </li>
   </template>
 
-  <script src="app.js?v=3" defer></script>
+  <script src="app.js?v=4" defer></script>
 </body>
 </html>
