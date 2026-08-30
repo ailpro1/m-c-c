@@ -4,6 +4,19 @@
    Commitment Checklist — state, persistence, rendering, effects
    ============================================================ */
 
+// Belt-and-braces zoom lock: iOS Safari's pinch gesture ignores
+// touch-action and the viewport meta tag on some versions.
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('touchmove', (e) => {
+  if (e.touches.length > 1) e.preventDefault();
+}, { passive: false });
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e) => {
+  const now = Date.now();
+  if (now - lastTouchEnd < 350) e.preventDefault();
+  lastTouchEnd = now;
+}, { passive: false });
+
 const STORAGE_KEY = 'commitment-checklist.v1';
 
 const SECTIONS = [
@@ -86,10 +99,15 @@ function sectionTotal(key) {
   return state[key].reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 }
 
+// Whatever is currently typed into each section's "add item" amount box,
+// counted immediately even before the item is added — so the balance
+// reacts the instant you start typing, not just after existing items change.
+const draftAmounts = { income: 0, commitments: 0, savings: 0 };
+
 function updateTotals(animateBalance) {
-  const income = sectionTotal('income');
-  const commitments = sectionTotal('commitments');
-  const savings = sectionTotal('savings');
+  const income = sectionTotal('income') + draftAmounts.income;
+  const commitments = sectionTotal('commitments') + draftAmounts.commitments;
+  const savings = sectionTotal('savings') + draftAmounts.savings;
   const balance = income - commitments - savings;
 
   document.getElementById('incomeTotal').textContent = formatRM(income);
@@ -98,7 +116,7 @@ function updateTotals(animateBalance) {
 
   for (const s of SECTIONS) {
     const el = document.querySelector(`.section[data-key="${s.key}"] .section-total`);
-    if (el) el.textContent = formatRM(sectionTotal(s.key));
+    if (el) el.textContent = formatRM(sectionTotal(s.key) + draftAmounts[s.key]);
   }
 
   const balanceEl = document.getElementById('balanceAmount');
@@ -127,6 +145,11 @@ function buildSectionShells() {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       addItem(s.key, form);
+    });
+
+    form.querySelector('.add-amount').addEventListener('input', (e) => {
+      draftAmounts[s.key] = parseFloat(e.target.value) || 0;
+      updateTotals(true);
     });
 
     grid.appendChild(node);
@@ -228,6 +251,7 @@ function addItem(key, form) {
   state[key].push({ id: uid(), name: name || 'New item', amount, checked: false });
   sortSection(key);
   renderSection(key);
+  draftAmounts[key] = 0;
   updateTotals(true);
   persist();
 

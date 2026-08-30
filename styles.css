@@ -39,6 +39,8 @@ html, body {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
+  touch-action: pan-x pan-y;
+  height: 100%;
 }
 
 button, input {
