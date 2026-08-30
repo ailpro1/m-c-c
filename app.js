@@ -27,11 +27,6 @@ const SECTIONS = [
 
 const SECTION_BY_KEY = Object.fromEntries(SECTIONS.map((s) => [s.key, s]));
 
-// Drop a licensed cash-register recording next to index.html and set this to
-// its filename (e.g. 'kaching.mp3') to use it instead of the synthesised
-// till bell below. Left null so no request is made when there's no file.
-const KACHING_SAMPLE_URL = null;
-
 /* ---------------- Cycle month ----------------
    The checklist runs in monthly cycles: clearing the checkmarks starts the
    next one. The stored cycle month is what the header reports, so it stays
@@ -173,11 +168,21 @@ function loadState() {
 
 let state = loadState();
 let saveTimer = null;
+
+function writeState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
 function persist() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, 150);
+  saveTimer = setTimeout(writeState, 150);
+}
+
+// Write immediately — used before reloading for an update, so a debounced
+// save can't be lost to the reload.
+function flushPersist() {
+  clearTimeout(saveTimer);
+  writeState();
 }
 
 /* ---------------- Sorting ---------------- */
@@ -344,6 +349,8 @@ const sheetDeleteBtn = document.getElementById('sheetDelete');
 
 let sheetCtx = null;
 let sheetLastProjection = 0;
+// Set when a service-worker update lands while the sheet is open.
+let pendingReload = false;
 
 // Balance as it would stand if the sheet were saved right now.
 function projectedBalance() {
@@ -416,7 +423,11 @@ function closeSheet() {
   sheetBackdrop.classList.remove('open');
   document.body.style.overflow = '';
   sheetCtx = null;
-  setTimeout(() => { sheetBackdrop.hidden = true; }, 300);
+  setTimeout(() => {
+    sheetBackdrop.hidden = true;
+    // An update that arrived while the sheet was open applies now.
+    if (pendingReload) { flushPersist(); window.location.reload(); }
+  }, 300);
 }
 
 function saveSheet() {
@@ -524,132 +535,45 @@ function getAudioCtx() {
   return audioCtx;
 }
 
-// Optional recorded sample, loaded only if KACHING_SAMPLE_URL is set.
-let kachingBuffer = null;
-async function loadKachingSample() {
-  if (!KACHING_SAMPLE_URL) return;
-  try {
-    const res = await fetch(KACHING_SAMPLE_URL);
-    if (!res.ok) return;
-    kachingBuffer = await getAudioCtx().decodeAudioData(await res.arrayBuffer());
-  } catch (e) {
-    console.warn('Ka-ching sample unavailable, using the synthesised bell.', e);
-  }
-}
-
-function makeNoiseBuffer(ctx, seconds) {
-  const length = Math.floor(ctx.sampleRate * seconds);
-  const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
-  return buffer;
-}
-
-/* A mechanical till, in three parts: the "ka" of the drawer lever, the
-   "ching" of a struck brass bell, and the drawer sliding open behind it.
-   The bell is modelled with inharmonic partials — the higher ones decay
-   fastest, which is what makes struck metal sound like metal rather than
-   like a sine chime. */
+// Percussive "cha" plus two bright chime tones — the original ka-ching.
 function playKaChing() {
   const ctx = getAudioCtx();
   if (!ctx) return;
-  const t0 = ctx.currentTime + 0.01;
+  const now = ctx.currentTime;
 
-  const master = ctx.createGain();
-  master.gain.value = 0.55;
-  master.connect(ctx.destination);
-
-  if (kachingBuffer) {
-    const src = ctx.createBufferSource();
-    src.buffer = kachingBuffer;
-    src.connect(master);
-    src.start(t0);
-    return;
+  // Percussive "cha" — short filtered noise burst.
+  const bufferSize = Math.floor(ctx.sampleRate * 0.05);
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
   }
+  const noise = ctx.createBufferSource();
+  noise.buffer = buffer;
+  const noiseFilter = ctx.createBiquadFilter();
+  noiseFilter.type = 'highpass';
+  noiseFilter.frequency.value = 1800;
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(0.35, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+  noise.connect(noiseFilter).connect(noiseGain).connect(ctx.destination);
+  noise.start(now);
+  noise.stop(now + 0.09);
 
-  // --- "ka": the lever/drawer clunk ---
-  const clunk = ctx.createBufferSource();
-  clunk.buffer = makeNoiseBuffer(ctx, 0.14);
-  const clunkFilter = ctx.createBiquadFilter();
-  clunkFilter.type = 'bandpass';
-  clunkFilter.frequency.value = 430;
-  clunkFilter.Q.value = 1.2;
-  const clunkGain = ctx.createGain();
-  clunkGain.gain.setValueAtTime(0.0001, t0);
-  clunkGain.gain.exponentialRampToValueAtTime(0.55, t0 + 0.005);
-  clunkGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.11);
-  clunk.connect(clunkFilter).connect(clunkGain).connect(master);
-  clunk.start(t0);
-  clunk.stop(t0 + 0.14);
-
-  const thump = ctx.createOscillator();
-  thump.type = 'sine';
-  thump.frequency.setValueAtTime(200, t0);
-  thump.frequency.exponentialRampToValueAtTime(72, t0 + 0.1);
-  const thumpGain = ctx.createGain();
-  thumpGain.gain.setValueAtTime(0.4, t0);
-  thumpGain.gain.exponentialRampToValueAtTime(0.0008, t0 + 0.13);
-  thump.connect(thumpGain).connect(master);
-  thump.start(t0);
-  thump.stop(t0 + 0.14);
-
-  // --- "ching": the bell, struck ~50 ms after the lever ---
-  const strike = t0 + 0.05;
-  const f0 = 1046;
-  const bell = ctx.createGain();
-  bell.gain.value = 1;
-  bell.connect(master);
-
-  [
-    { ratio: 1.00, gain: 0.42, decay: 1.25 },
-    { ratio: 2.01, gain: 0.30, decay: 0.95 },
-    { ratio: 2.77, gain: 0.22, decay: 0.70 },
-    { ratio: 4.07, gain: 0.14, decay: 0.48 },
-    { ratio: 5.42, gain: 0.10, decay: 0.34 },
-    { ratio: 8.91, gain: 0.05, decay: 0.22 },
-  ].forEach((p) => {
+  // Bright "ching" bell tones, two quick chimes.
+  [1760, 2637].forEach((freq, i) => {
     const osc = ctx.createOscillator();
     osc.type = 'sine';
-    // Slight detune per partial keeps it from sounding synthetic.
-    osc.frequency.value = f0 * p.ratio * (1 + (Math.random() - 0.5) * 0.005);
+    osc.frequency.value = freq;
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0, strike);
-    gain.gain.linearRampToValueAtTime(p.gain, strike + 0.004);
-    gain.gain.exponentialRampToValueAtTime(0.0004, strike + p.decay);
-    osc.connect(gain).connect(bell);
-    osc.start(strike);
-    osc.stop(strike + p.decay + 0.05);
+    const start = now + 0.04 + i * 0.07;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.28, start + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0008, start + 0.55);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(start);
+    osc.stop(start + 0.56);
   });
-
-  // Bright metallic edge on the hammer contact.
-  const ping = ctx.createBufferSource();
-  ping.buffer = makeNoiseBuffer(ctx, 0.04);
-  const pingFilter = ctx.createBiquadFilter();
-  pingFilter.type = 'highpass';
-  pingFilter.frequency.value = 4200;
-  const pingGain = ctx.createGain();
-  pingGain.gain.setValueAtTime(0.3, strike);
-  pingGain.gain.exponentialRampToValueAtTime(0.0005, strike + 0.035);
-  ping.connect(pingFilter).connect(pingGain).connect(master);
-  ping.start(strike);
-  ping.stop(strike + 0.04);
-
-  // --- the drawer sliding open underneath the ring ---
-  const slideStart = t0 + 0.12;
-  const slide = ctx.createBufferSource();
-  slide.buffer = makeNoiseBuffer(ctx, 0.4);
-  const slideFilter = ctx.createBiquadFilter();
-  slideFilter.type = 'bandpass';
-  slideFilter.frequency.setValueAtTime(700, slideStart);
-  slideFilter.frequency.exponentialRampToValueAtTime(1600, slideStart + 0.28);
-  slideFilter.Q.value = 0.8;
-  const slideGain = ctx.createGain();
-  slideGain.gain.setValueAtTime(0.0001, slideStart);
-  slideGain.gain.linearRampToValueAtTime(0.12, slideStart + 0.09);
-  slideGain.gain.exponentialRampToValueAtTime(0.0001, slideStart + 0.3);
-  slide.connect(slideFilter).connect(slideGain).connect(master);
-  slide.start(slideStart);
-  slide.stop(slideStart + 0.4);
 }
 
 const confettiCanvas = document.getElementById('confettiCanvas');
@@ -764,7 +688,73 @@ buildSectionShells();
 renderAll({ skipFlip: true });
 
 // Unlock audio on first interaction (mobile autoplay policies).
-window.addEventListener('pointerdown', () => {
-  getAudioCtx();
-  loadKachingSample();
-}, { once: true });
+window.addEventListener('pointerdown', () => getAudioCtx(), { once: true });
+
+/* ---------------- Service worker: keep the app self-updating ----------------
+   Assets are served network-first, so a deploy reaches the browser on the
+   next load without any manual cache-busting. When a new worker takes over
+   an already-controlled page, reload so the running app matches the files
+   just fetched — deferred if the user is mid-edit in the sheet. */
+
+let reloadingForUpdate = false;
+
+function applyUpdateWhenIdle() {
+  if (reloadingForUpdate) return;
+  reloadingForUpdate = true;
+  // Don't yank the page out from under someone typing an amount.
+  if (sheetCtx) { pendingReload = true; return; }
+  flushPersist();
+  window.location.reload();
+}
+
+/* A tab left open all day would otherwise sit on old code until it is
+   refreshed, since network-first only helps at load time. So compare the
+   validator the server reports for app.js against the one it reported when
+   this page loaded; if the deploy changed, reload into it. */
+
+let assetSignature = null;
+
+async function readAssetSignature() {
+  try {
+    const res = await fetch('app.js', { method: 'HEAD', cache: 'reload' });
+    if (!res.ok) return null;
+    return res.headers.get('etag') || res.headers.get('last-modified');
+  } catch (e) {
+    return null; // Offline, or the host hides validators — try again later.
+  }
+}
+
+async function checkForUpdate(registration) {
+  if (registration) registration.update();
+  const signature = await readAssetSignature();
+  if (!signature) return;
+  if (assetSignature === null) {
+    assetSignature = signature;
+  } else if (signature !== assetSignature) {
+    assetSignature = signature;
+    applyUpdateWhenIdle();
+  }
+}
+
+if ('serviceWorker' in navigator) {
+  // Null on a first visit; an update should only reload an already-live page.
+  const hadController = !!navigator.serviceWorker.controller;
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadController) applyUpdateWhenIdle();
+  });
+
+  window.addEventListener('load', async () => {
+    let registration = null;
+    try {
+      registration = await navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });
+    } catch (e) {
+      console.warn('Service worker registration failed; running without it.', e);
+    }
+    checkForUpdate(registration);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') checkForUpdate(registration);
+    });
+    setInterval(() => checkForUpdate(registration), 15 * 60 * 1000);
+  });
+}
