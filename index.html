@@ -8,7 +8,7 @@
 <!-- Bump ?v= on styles.css/app.js whenever their content changes, so
      browsers and any CDN/proxy in front of this site fetch the new file
      instead of serving a stale cached copy under the same URL. -->
-<link rel="stylesheet" href="styles.css?v=2">
+<link rel="stylesheet" href="styles.css?v=3">
 </head>
 <body>
 
@@ -17,7 +17,7 @@
   <header class="topbar">
     <div class="balance-card">
       <div class="balance-label">Balance</div>
-      <div class="balance-amount" id="balanceAmount">RM&nbsp;0.00</div>
+      <div class="balance-amount" id="balanceAmount"></div>
       <div class="balance-breakdown">
         <div class="chip chip-income">
           <span class="dot"></span>Income
@@ -41,6 +41,44 @@
 
   <main class="sections-grid" id="sectionsGrid"></main>
 
+  <!-- Add / edit sheet: shows the live balance as the amount is typed -->
+  <div class="sheet-backdrop" id="sheetBackdrop" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+      <div class="sheet-grabber"></div>
+
+      <div class="sheet-topbar">
+        <button class="sheet-btn" id="sheetCancel" type="button">Cancel</button>
+        <span class="sheet-title" id="sheetTitle">New item</span>
+        <button class="sheet-btn strong" id="sheetSave" type="button">Save</button>
+      </div>
+
+      <div class="sheet-preview">
+        <div class="sheet-preview-label">Balance after this</div>
+        <div class="sheet-preview-amount" id="sheetBalance"></div>
+        <div class="sheet-preview-delta" id="sheetDelta"></div>
+      </div>
+
+      <div class="sheet-fields">
+        <label class="sheet-field">
+          <span class="sheet-field-label">Name</span>
+          <input class="sheet-name" id="sheetName" type="text" placeholder="e.g. Rent" autocomplete="off">
+        </label>
+
+        <label class="sheet-field">
+          <span class="sheet-field-label">Amount</span>
+          <span class="sheet-amount-wrap">
+            <span class="rm-prefix">RM</span>
+            <input class="sheet-amount" id="sheetAmount" type="text" inputmode="numeric" autocomplete="off" placeholder="0.00">
+          </span>
+        </label>
+      </div>
+
+      <p class="sheet-hint">Cents first — tapping <b>1 2 5 0</b> gives <b>RM 12.50</b></p>
+
+      <button class="sheet-delete" id="sheetDelete" type="button" hidden>Delete item</button>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="modalBackdrop">
     <div class="modal">
       <h3>Clear all checkmarks?</h3>
@@ -62,33 +100,28 @@
         <span class="section-total">RM0.00</span>
       </header>
       <ul class="item-list"></ul>
-      <form class="add-item-form">
-        <input class="add-name" type="text" placeholder="Item name" autocomplete="off">
-        <div class="add-amount-wrap">
-          <span class="rm-prefix">RM</span>
-          <input class="add-amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
-        </div>
-        <button class="add-btn" type="submit" aria-label="Add item">
-          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-        </button>
-      </form>
+      <button class="add-row" type="button">
+        <span class="add-row-icon">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
+        </span>
+        Add item
+      </button>
     </section>
   </template>
 
   <template id="item-template">
     <li class="item" data-id="">
       <button class="checkbox" type="button" aria-label="Toggle done"></button>
-      <input class="item-name" type="text" autocomplete="off">
-      <div class="item-amount-wrap">
-        <span class="rm-prefix">RM</span>
-        <input class="item-amount" type="number" inputmode="decimal" step="0.01" min="0">
-      </div>
+      <button class="item-body" type="button">
+        <span class="item-name"></span>
+        <span class="item-amount"></span>
+      </button>
       <button class="delete-btn" type="button" aria-label="Delete item">
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       </button>
     </li>
   </template>
 
-  <script src="app.js?v=2" defer></script>
+  <script src="app.js?v=3" defer></script>
 </body>
 </html>
