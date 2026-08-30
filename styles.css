@@ -82,6 +82,13 @@ button, input { font-family: inherit; color: inherit; }
   box-shadow: var(--shadow);
 }
 
+.balance-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .balance-label {
   font-size: 12.5px;
   font-weight: 600;
@@ -89,6 +96,59 @@ button, input { font-family: inherit; color: inherit; }
   text-transform: uppercase;
   color: var(--text-secondary);
 }
+
+/* Which monthly cycle the checklist is currently tracking. */
+.cycle-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--fill);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cycle-chip.stale { background: rgba(255,149,0,0.16); color: var(--orange); }
+
+.cycle-banner {
+  max-width: 1080px;
+  width: calc(100% - 32px);
+  margin: 14px auto 0;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+  border-left: 4px solid var(--orange);
+}
+.cycle-banner[hidden] { display: none !important; }
+.cycle-banner-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cycle-banner-text strong { font-size: 14.5px; font-weight: 700; }
+.cycle-banner-text span { font-size: 12.5px; color: var(--text-secondary); }
+.cycle-banner-btn {
+  flex-shrink: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--orange);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 9px 14px;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+.cycle-banner-btn:active { transform: scale(0.95); }
+
+@media (max-width: 420px) {
+  .cycle-banner { flex-direction: column; align-items: stretch; }
+  .cycle-banner-btn { width: 100%; }
+}
+
 
 /* Balance colour is conditional on the value: in the black, in the red,
    or exactly break-even. */
@@ -144,18 +204,24 @@ button, input { font-family: inherit; color: inherit; }
 .chip-commitments .dot { background: var(--orange); }
 .chip-savings .dot { background: var(--purple); }
 
+/* Sits at the very bottom of the page, below every section. */
+.page-footer {
+  padding: 4px 16px calc(40px + env(safe-area-inset-bottom));
+  display: flex;
+  justify-content: center;
+}
+
 .clear-btn {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 12px auto 0;
   width: fit-content;
-  padding: 8px 16px;
+  padding: 12px 22px;
   border: none;
   border-radius: 999px;
   background: var(--fill);
   color: var(--blue);
-  font-size: 13.5px;
+  font-size: 14.5px;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s ease, transform 0.1s ease;
@@ -167,7 +233,7 @@ button, input { font-family: inherit; color: inherit; }
 .sections-grid {
   max-width: 1080px;
   margin: 0 auto;
-  padding: 16px 16px calc(60px + env(safe-area-inset-bottom));
+  padding: 16px 16px 8px;
   display: grid;
   grid-template-columns: 1fr;
   gap: 16px;
