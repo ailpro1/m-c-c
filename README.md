@@ -37,27 +37,32 @@ Then open `http://localhost:8000`.
 
 ## The "ka-ching" sound
 
-The till sound is synthesised in the Web Audio API — no audio file ships with
-the app, so there's nothing to download or license. It models a real cash
-register in three parts: the lever clunk ("ka"), a struck brass bell with
-inharmonic partials ("ching"), and the drawer sliding open underneath.
+Synthesised in the Web Audio API — no audio file ships with the app, so
+there's nothing to download or license. A short filtered noise burst for the
+"cha", then two bright chime tones for the "ching".
 
-To use a real recording instead, drop the file next to `index.html` and set
-`KACHING_SAMPLE_URL` near the top of `app.js` to its filename:
+## Staying up to date
 
-```js
-const KACHING_SAMPLE_URL = 'kaching.mp3';
-```
+`sw.js` is a service worker that serves same-origin requests network-first:
+whatever the server has wins whenever the network is reachable, with the
+cache kept only as an offline fallback. That means a deploy reaches the
+browser on the next load by itself — there are no `?v=` query strings to
+bump by hand.
 
-The app falls back to the synthesised bell if the file is missing or fails to
-decode. Make sure you have the rights to whatever recording you use.
+A tab left open would otherwise sit on old code until refreshed, so the page
+also polls the `ETag`/`Last-Modified` of `app.js` (on regaining focus, and
+every 15 minutes). If it differs from the one seen at load, the page reloads
+into the new version — deferred until the add/edit sheet is closed so an
+update never interrupts someone entering an amount, with pending state
+flushed to storage first.
 
 ## Structure
 
 - `index.html` — markup and `<template>`s for sections/items.
 - `styles.css` — iOS-style design system (colors, layout, animations).
-- `app.js` — state, persistence, rendering, sorting, and the
-  confetti/sound/vibration "celebration" effect.
+- `app.js` — state, persistence, rendering, sorting, the add/edit sheet, the
+  confetti/sound/vibration "celebration" effect, and update checking.
+- `sw.js` — service worker: network-first caching and offline fallback.
 
 No frameworks or external dependencies — easy to extend (e.g. swap
 `localStorage` for a backend, or add categories) without a rewrite.
