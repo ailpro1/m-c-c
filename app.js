@@ -44,6 +44,41 @@ function monthLabel(key) {
   });
 }
 
+/* ---------------- Due dates ----------------
+   Optional per item, stored as a plain 'YYYY-MM-DD' string. Parsed to local
+   midnight rather than through Date(string), which would read it as UTC and
+   shift the day for anyone east of Greenwich. */
+
+function parseDue(due) {
+  const [year, month, day] = due.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function startOfToday() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+function shortDate(date) {
+  return date.toLocaleDateString('en-MY', { day: 'numeric', month: 'short' });
+}
+
+// Label plus urgency tone. A ticked item is done, so it never reads as overdue.
+function dueInfo(due, checked) {
+  const date = parseDue(due);
+  const days = Math.round((date - startOfToday()) / 86400000);
+
+  if (checked) return { text: `Due ${shortDate(date)}`, tone: '' };
+  if (days < 0) {
+    const n = Math.abs(days);
+    return { text: `Overdue by ${n} day${n === 1 ? '' : 's'}`, tone: 'overdue' };
+  }
+  if (days === 0) return { text: 'Due today', tone: 'today' };
+  if (days === 1) return { text: 'Due tomorrow', tone: 'soon' };
+  if (days <= 7) return { text: `Due in ${days} days`, tone: 'soon' };
+  return { text: `Due ${shortDate(date)}`, tone: '' };
+}
+
 /* ---------------- Money formatting ---------------- */
 
 function groupAmount(n) {
@@ -222,6 +257,40 @@ function updateTotals() {
   setAnimatedAmount(balanceEl, formatRMLarge(balance), balance - lastBalance);
   applyBalanceTone(balanceEl, balance);
   lastBalance = balance;
+
+  updateProgress();
+}
+
+/* ---------------- Progress ----------------
+   Counted per item across all three sections, so ticking every box reads
+   exactly 100% regardless of the amounts involved. */
+
+const progressEl = document.getElementById('progress');
+const progressFill = document.getElementById('progressFill');
+const progressLabel = document.getElementById('progressLabel');
+const progressPct = document.getElementById('progressPct');
+
+function updateProgress() {
+  let total = 0;
+  let done = 0;
+  for (const s of SECTIONS) {
+    for (const item of state[s.key]) {
+      total++;
+      if (item.checked) done++;
+    }
+  }
+
+  const pct = total ? (done / total) * 100 : 0;
+  const complete = total > 0 && done === total;
+
+  progressFill.style.width = `${pct}%`;
+  progressEl.classList.toggle('complete', complete);
+  progressPct.textContent = `${Math.round(pct)}%`;
+  progressLabel.textContent = total === 0
+    ? 'Nothing to tick yet'
+    : complete
+      ? `All ${total} ticked off`
+      : `${done} of ${total} ticked off`;
 }
 
 /* ---------------- Rendering ---------------- */
@@ -276,6 +345,16 @@ function renderSection(key, { skipFlip } = {}) {
     row.querySelector('.item-body').addEventListener('click', () => {
       openSheet({ mode: 'edit', key, id: item.id });
     });
+
+    const dueEl = row.querySelector('.item-due');
+    if (item.due) {
+      const info = dueInfo(item.due, item.checked);
+      dueEl.textContent = info.text;
+      dueEl.className = `item-due${info.tone ? ' ' + info.tone : ''}`;
+      dueEl.hidden = false;
+    } else {
+      dueEl.hidden = true;
+    }
 
     row.querySelector('.delete-btn').addEventListener('click', () => deleteItem(key, item.id));
 
@@ -346,6 +425,19 @@ const sheetAmount = document.getElementById('sheetAmount');
 const sheetBalance = document.getElementById('sheetBalance');
 const sheetDelta = document.getElementById('sheetDelta');
 const sheetDeleteBtn = document.getElementById('sheetDelete');
+const sheetDue = document.getElementById('sheetDue');
+const sheetDueClear = document.getElementById('sheetDueClear');
+
+// The Clear button only makes sense once a date is set.
+function syncDueClear() {
+  sheetDueClear.hidden = !sheetDue.value;
+}
+sheetDue.addEventListener('change', syncDueClear);
+sheetDue.addEventListener('input', syncDueClear);
+sheetDueClear.addEventListener('click', () => {
+  sheetDue.value = '';
+  syncDueClear();
+});
 
 let sheetCtx = null;
 let sheetLastProjection = 0;
@@ -390,15 +482,18 @@ function openSheet({ mode, key, id }) {
     if (!item) return;
     sheetCtx.digits = amountToDigits(item.amount);
     sheetName.value = item.name;
+    sheetDue.value = item.due || '';
     sheetTitle.textContent = `Edit ${section.noun}`;
     sheetDeleteBtn.hidden = false;
   } else {
     sheetName.value = '';
+    sheetDue.value = '';
     sheetTitle.textContent = `New ${section.noun}`;
     sheetDeleteBtn.hidden = true;
   }
 
   sheetAmount.value = sheetCtx.digits ? formatDigits(sheetCtx.digits) : '';
+  syncDueClear();
 
   // Start the preview from today's balance so the first keystroke animates.
   sheetBalance.dataset.text = '';
@@ -435,15 +530,17 @@ function saveSheet() {
   const { mode, key, id } = sheetCtx;
   const amount = digitsToAmount(sheetCtx.digits);
   const name = sheetName.value.trim();
+  const due = sheetDue.value || null;
 
   if (mode === 'add') {
     if (!name && !amount) { closeSheet(); return; }
-    state[key].push({ id: uid(), name: name || 'New item', amount, checked: false });
+    state[key].push({ id: uid(), name: name || 'New item', amount, due, checked: false });
   } else {
     const item = state[key].find((it) => it.id === id);
     if (item) {
       item.name = name || item.name;
       item.amount = amount;
+      item.due = due;
     }
   }
 
@@ -513,6 +610,9 @@ function toggleItem(key, id) {
       setTimeout(() => row.classList.remove('just-checked'), 500);
     }
   }
+
+  // The bar moves with the tick, not after the row has finished travelling.
+  updateProgress();
 
   // Give the celebration a beat before the row hops to the bottom.
   setTimeout(() => {
@@ -678,8 +778,17 @@ modalBackdrop.addEventListener('click', (e) => {
   if (e.target === modalBackdrop) modalBackdrop.classList.remove('open');
 });
 
-// If the app is left open across midnight into a new month, catch up.
-setInterval(renderCycle, 60 * 1000);
+/* If the app is left open across midnight, catch up: the cycle banner may
+   be due, and "Due tomorrow" has quietly become "Due today". */
+let currentDay = startOfToday().getTime();
+setInterval(() => {
+  renderCycle();
+  const today = startOfToday().getTime();
+  if (today !== currentDay) {
+    currentDay = today;
+    for (const s of SECTIONS) renderSection(s.key, { skipFlip: true });
+  }
+}, 60 * 1000);
 
 /* ---------------- Init ---------------- */
 

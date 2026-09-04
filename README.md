@@ -17,6 +17,12 @@ so it runs by opening `index.html` or serving the folder from any static host.
 - Items sort largest-to-smallest amount; ticking one off crosses it out,
   animates (confetti + haptic buzz + a "ka-ching" sound) and sends it to the
   bottom of its section.
+- A progress bar in the header counts ticked items across all three sections,
+  reaching 100% (and turning green) once everything is ticked.
+- Each item can carry an optional due date, shown on the row as a coloured
+  badge: red when overdue, amber when due today or within the week, grey
+  otherwise. A ticked item shows the plain date rather than an overdue
+  warning.
 - Monthly cycles: the header chip shows which cycle month you're in, turning
   amber once the calendar moves past it, with a banner offering to start the
   new cycle. "Clear checkmarks" (at the bottom of the page) rolls the cycle

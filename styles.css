@@ -228,6 +228,44 @@ button, input { font-family: inherit; color: inherit; }
 }
 .clear-btn:active { transform: scale(0.96); }
 
+/* ---------- Progress ---------- */
+
+.progress { margin-top: 14px; }
+
+.progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.progress-label { font-size: 12.5px; font-weight: 600; color: var(--text-secondary); }
+.progress-pct {
+  font-size: 12.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--fill);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--blue), #5AC8FA);
+  transition: width 0.45s cubic-bezier(.22,1,.36,1), background 0.3s ease;
+}
+
+/* Everything ticked: the bar turns green and the label says so. */
+.progress.complete .progress-fill { background: linear-gradient(90deg, var(--green), #63E6BE); }
+.progress.complete .progress-label,
+.progress.complete .progress-pct { color: var(--green); }
+
 /* ---------- Sections ---------- */
 
 .sections-grid {
@@ -369,6 +407,13 @@ button, input { font-family: inherit; color: inherit; }
 }
 .item-body:active { background: var(--fill); }
 
+.item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .item-name {
   font-weight: 500;
   overflow: hidden;
@@ -382,6 +427,29 @@ button, input { font-family: inherit; color: inherit; }
   text-decoration: line-through;
   color: var(--text-secondary);
 }
+
+/* Due date badge: colour carries the urgency. */
+.item-due {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.item-due[hidden] { display: none; }
+.item-due::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.item-due.overdue { color: var(--red); }
+.item-due.today { color: var(--orange); }
+.item-due.soon { color: var(--orange); }
+.item.checked .item-due { color: var(--text-secondary); }
 
 .delete-btn {
   width: 26px;
@@ -583,6 +651,39 @@ button, input { font-family: inherit; color: inherit; }
   text-align: right;
 }
 .sheet-amount:focus { outline: none; }
+
+.sheet-date-wrap {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+.sheet-date {
+  border: none;
+  background: transparent;
+  font-size: 15.5px;
+  font-weight: 600;
+  padding: 4px 0;
+  color: inherit;
+  min-width: 0;
+}
+.sheet-date:focus { outline: none; }
+.sheet-date::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.6; }
+.sheet-date-clear {
+  flex-shrink: 0;
+  border: none;
+  background: var(--fill);
+  color: var(--blue);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.sheet-date-clear[hidden] { display: none; }
+.sheet-date-clear:active { opacity: 0.6; }
 
 .sheet-hint {
   font-size: 12.5px;
