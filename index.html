@@ -37,6 +37,16 @@
           <strong id="savingsTotal">RM0.00</strong>
         </div>
       </div>
+
+      <div class="progress" id="progress">
+        <div class="progress-head">
+          <span class="progress-label" id="progressLabel"></span>
+          <span class="progress-pct" id="progressPct"></span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -88,6 +98,14 @@
             <input class="sheet-amount" id="sheetAmount" type="text" inputmode="numeric" autocomplete="off" placeholder="0.00">
           </span>
         </label>
+
+        <div class="sheet-field">
+          <span class="sheet-field-label">Due date</span>
+          <span class="sheet-date-wrap">
+            <input class="sheet-date" id="sheetDue" type="date">
+            <button class="sheet-date-clear" id="sheetDueClear" type="button" hidden>Clear</button>
+          </span>
+        </div>
       </div>
 
       <p class="sheet-hint">Cents first — tapping <b>1 2 5 0</b> gives <b>RM 12.50</b></p>
@@ -130,7 +148,10 @@
     <li class="item" data-id="">
       <button class="checkbox" type="button" aria-label="Toggle done"></button>
       <button class="item-body" type="button">
-        <span class="item-name"></span>
+        <span class="item-text">
+          <span class="item-name"></span>
+          <span class="item-due" hidden></span>
+        </span>
         <span class="item-amount"></span>
       </button>
       <button class="delete-btn" type="button" aria-label="Delete item">
