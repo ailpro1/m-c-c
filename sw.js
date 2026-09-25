@@ -14,6 +14,10 @@ const CORE = [
   './index.html',
   './styles.css',
   './app.js',
+  './icon.svg',
+  './favicon-32.png',
+  './apple-touch-icon.png',
+  './manifest.webmanifest',
 ];
 
 self.addEventListener('install', (event) => {
