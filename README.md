@@ -62,6 +62,22 @@ into the new version — deferred until the add/edit sheet is closed so an
 update never interrupts someone entering an amount, with pending state
 flushed to storage first.
 
+## Icon
+
+`icon.svg` is the source of truth — a piggy bank with a ticked-off badge. The
+PNGs beside it are rendered from that file for the places that can't take SVG,
+and should be regenerated from it if the artwork changes:
+
+| File | Size | Shape |
+| --- | --- | --- |
+| `favicon-32.png` | 32 | rounded, transparent corners |
+| `apple-touch-icon.png` | 180 | full-bleed, opaque (iOS applies its own mask and dislikes alpha) |
+| `icon-192.png`, `icon-512.png` | 192 / 512 | rounded, transparent corners (`purpose: any`) |
+| `icon-maskable-512.png` | 512 | full-bleed, artwork inset to the safe zone (`purpose: maskable`) |
+
+`manifest.webmanifest` makes "Add to Home Screen" open it standalone with the
+right icon and name.
+
 ## Structure
 
 - `index.html` — markup and `<template>`s for sections/items.
